@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+name: teleco-churn-deploy-env
+image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest
+conda_file: ../../../data-science/environment/deploy-conda.yml
+description: Environment created from a Docker image plus Conda environment to train telecom churn model.

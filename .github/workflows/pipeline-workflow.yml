@@ -1,0 +1,100 @@
+name: pipeline
+
+on: 
+  workflow_dispatch:
+jobs:
+  get-config:
+      uses: Azure/mlops-templates/.github/workflows/read-yaml.yml@main
+      with:
+        file_name: config-infra-prod.yml
+  register-environment:
+      needs: get-config
+      uses: Azure/mlops-templates/.github/workflows/register-environment.yml@main
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}     
+        environment_file:  mlops/azureml/train/train-env.yml
+        conda_file: data-science/environment/train-conda.yml
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+          
+  register-dataset:
+    needs: get-config
+    uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@main
+    with:
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      name: teleco-churn-data
+      data_file: mlops/azureml/train/data.yml
+    secrets:
+      creds: ${{secrets.AZURE_CREDENTIALS}}
+      
+  create-compute:
+      needs: [get-config,register-environment,register-dataset]
+      uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
+      with:
+        cluster_name: cpu-cluster
+        size: Standard_DS11_v2
+        min_instances: 0
+        max_instances: 1
+        cluster_tier: dedicated
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}     
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+      
+  run-pipeline:
+      needs: [get-config,register-environment,create-compute,register-dataset]
+      uses: Azure/mlops-templates/.github/workflows/run-pipeline.yml@main
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}     
+        parameters-file:  mlops/azureml/train/pipeline.yml
+        job-name: test
+      secrets:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+
+  register-environment-deploy:
+    needs: get-config
+    uses: Azure/mlops-templates/.github/workflows/register-environment.yml@main
+    with:
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}     
+      environment_file:  mlops/azureml/deploy/online/deploy-env.yml
+      conda_file: data-science/environment/deploy-conda.yml
+    secrets:
+        creds: ${{secrets.AZURE_CREDENTIALS}}
+          
+  create-endpoint:
+      needs: [get-config,run-pipeline]
+      uses: Azure/mlops-templates/.github/workflows/create-endpoint.yml@main
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }} 
+        endpoint_file: mlops/azureml/deploy/online/online-endpoint.yml
+        endpoint_name: teleco-churn-endpoint
+        endpoint_type: online
+      secrets:
+        creds: ${{secrets.AZURE_CREDENTIALS}}
+  create-deployment:
+      uses: Azure/mlops-templates/.github/workflows/create-deployment.yml@main
+      needs: [get-config,register-environment-deploy,create-endpoint]
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }} 
+        endpoint_file: mlops/azureml/deploy/online/online-deployment.yml
+        endpoint_name: teleco-churn-endpoint
+        endpoint_type: online
+        deployment_name: teleco-churn-online-dp
+      secrets:
+        creds: ${{secrets.AZURE_CREDENTIALS}}
+  allocate-traffic:
+      uses: Azure/mlops-templates/.github/workflows/allocate-traffic.yml@main
+      needs: [get-config,create-deployment]
+      with:
+        resource_group: ${{ needs.get-config.outputs.resource_group }}
+        workspace_name: ${{ needs.get-config.outputs.aml_workspace }} 
+        traffic_allocation: teleco-churn-online-dp=100
+        endpoint_name: teleco-churn-endpoint
+      secrets:
+        creds: ${{secrets.AZURE_CREDENTIALS}}

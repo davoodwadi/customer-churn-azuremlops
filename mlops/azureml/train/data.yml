@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+
+type: uri_file
+name: teleco-churn-data
+description: A dataset for predicting churn in telecom industry
+path: ../../../data/teleco_churn.csv
