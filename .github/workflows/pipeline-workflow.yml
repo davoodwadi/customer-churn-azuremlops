@@ -30,7 +30,7 @@ jobs:
       creds: ${{secrets.AZURE_CREDENTIALS}}
 
   create-compute:
-    needs: [get-config, register-environment, register-dataset]
+    needs: get-config
     uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
     with:
       cluster_name: cpu-cluster
